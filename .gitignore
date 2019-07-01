@@ -102,3 +102,10 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Model data
+*.binary
+*.pb
+*pbmm
+*.tflite
+trie
