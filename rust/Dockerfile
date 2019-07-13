@@ -1,0 +1,18 @@
+FROM rust:latest
+
+RUN apt-get update -y && \
+			apt-get install -y clang
+
+WORKDIR /deepspeech
+COPY . .
+
+RUN cargo install --path .
+
+COPY ../config.json config.json
+
+ENV MODEL_PACKAGE https://github.com/mozilla/DeepSpeech/releases/download/v0.5.1/deepspeech-0.5.1-models.tar.gz
+
+ADD ${MODEL_PACKAGE} models.tar.gz
+RUN tar xvfz models.tar.gz models
+
+CMD ["rust"]

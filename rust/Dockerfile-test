@@ -1,10 +1,15 @@
-FROM python:3
+FROM rust:latest
 
-WORKDIR /usr/src/app
+RUN apt-get update -y && \
+			apt-get install -y clang
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY src src
+WORKDIR /src/redispech
+COPY . .
+
+COPY ../audio audio
+
+RUN cargo install --path .
+
 COPY config.json config.json
 
 ENV MODEL_PACKAGE https://github.com/mozilla/DeepSpeech/releases/download/v0.5.1/deepspeech-0.5.1-models.tar.gz
@@ -12,4 +17,4 @@ ENV MODEL_PACKAGE https://github.com/mozilla/DeepSpeech/releases/download/v0.5.1
 ADD ${MODEL_PACKAGE} models.tar.gz
 RUN tar xvfz models.tar.gz models
 
-CMD [ "python", "./src/main.py", "config.json" ]
+CMD ["redispech"]
