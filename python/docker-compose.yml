@@ -1,0 +1,16 @@
+version: "3.5"
+services:
+  broker:
+    image: rabbitmq
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+  redispeech:
+    build: .
+    container_name: redispeech
+    environment:
+      BROKER_HOST: broker
+      BROKER_PORT: 5672
+networks:
+ default:
+  name: redis
