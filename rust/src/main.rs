@@ -6,7 +6,7 @@ extern crate serde_json;
 use std::env::args;
 use std::fs;
 use std::path::Path;
-
+use std::thread;
 // use audrey::read::Reader;
 // use audrey::sample::signal::{from_iter, Signal};
 // use byteorder::{ByteOrder, LittleEndian};
@@ -187,5 +187,5 @@ fn main() {
     // };
 
     let mut queue: Queue<Vec<u8>> = Queue::new();
-    attach_consumer(conn, subcribe_channels, &mut queue);
+    thread::spawn(move || attach_consumer(conn, subcribe_channels, &mut queue));
 }
