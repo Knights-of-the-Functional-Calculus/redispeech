@@ -1,0 +1,6 @@
+{
+    "model": "../models/output_graph.pbmm",
+    "alphabet": "../models/alphabet.txt",
+    "binary": "../models/lm.binary",
+    "trie": "../models/trie"
+}

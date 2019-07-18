@@ -17,4 +17,4 @@ ENV MODEL_PACKAGE https://github.com/mozilla/DeepSpeech/releases/download/v0.5.1
 ADD ${MODEL_PACKAGE} models.tar.gz
 RUN tar xvfz models.tar.gz models
 
-CMD ["redispech"]
+CMD ["rust"]

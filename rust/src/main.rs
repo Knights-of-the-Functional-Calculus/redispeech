@@ -1,4 +1,4 @@
-extern crate audrey;
+// extern crate audrey;
 extern crate deepspeech;
 extern crate serde;
 extern crate serde_json;
@@ -6,15 +6,15 @@ extern crate serde_json;
 use std::env::args;
 use std::fs;
 use std::path::Path;
-use std::thread;
-// use audrey::read::Reader;
-// use audrey::sample::signal::{from_iter, Signal};
-// use byteorder::{ByteOrder, LittleEndian};
+use std::{thread, time};
+
+use byteorder::{ByteOrder, LittleEndian};
 use deepspeech::Model;
 
-use queues::{IsQueue, Queue};
+use std::sync::mpsc;
+use std::sync::mpsc::SyncSender;
+
 use std::env;
-// These constants are taken from the C++ sources of the client.
 
 use std::collections::HashMap;
 
@@ -26,15 +26,20 @@ use lapin_async as lapin;
 
 use std::fmt;
 
+// These constants are taken from the C++ sources of the client.
 const N_CEP: u16 = 26;
 const N_CONTEXT: u16 = 9;
 const BEAM_WIDTH: u16 = 500;
+const SAMPLE_RATE: u32 = 16_000;
 
 const LM_WEIGHT: f32 = 0.75;
 const VALID_WORD_COUNT_WEIGHT: f32 = 1.85;
 
+const HALF_SECOND: time::Duration = time::Duration::from_millis(500);
+
 struct Subscriber {
     channel: Channel,
+    sync_sender: SyncSender<Vec<u8>>,
 }
 
 impl fmt::Debug for Subscriber {
@@ -49,6 +54,9 @@ impl ConsumerSubscriber for Subscriber {
             .basic_ack(delivery.delivery_tag, BasicAckOptions::default())
             .as_error()
             .expect("basic_ack");
+        if let Ok(_) = self.sync_sender.send(delivery.data) {
+            println!("Data sent");
+        }
     }
     fn drop_prefetched_messages(&self) {}
     fn cancel(&self) {}
@@ -73,16 +81,16 @@ pub fn send_message(publish_channel: &Channel, queue_name: &str, payload: &[u8])
         )
         .wait()
         .expect("basic_publish");
-    print!("Payload sent to {}", queue_name);
+    println!("Payload sent to {}", queue_name);
 }
 
 pub fn attach_consumer(
+    queue_name: &str,
+    consumer_name: &'static str,
     conn: Connection,
-    mut subcribe_channels: HashMap<&str, Channel>,
-    message_passer: &mut Queue<Vec<u8>>,
+    subcribe_channels: &mut HashMap<&'static str, Channel>,
+    sync_sender: &SyncSender<Vec<u8>>,
 ) {
-    let queue_name = "audio";
-    let consumer_name = "interpret";
     let channel: &Channel = subcribe_channels
         .entry(consumer_name)
         .or_insert(conn.create_channel().wait().expect("create_channel"));
@@ -103,21 +111,12 @@ pub fn attach_consumer(
             FieldTable::default(),
             Box::new(Subscriber {
                 channel: channel.clone(),
+                sync_sender: sync_sender.clone(),
             }),
         )
         .wait()
         .expect("basic_consume");
     println!("Consumer attached to {}", queue_name);
-    // get the next message
-    if let Ok(message) = channel
-        .basic_get(queue_name, BasicGetOptions::default())
-        .wait()
-    {
-        let data = message.unwrap().delivery.data;
-        if let Ok(_) = message_passer.add(data) {
-            println!("Data store in local queue");
-        }
-    }
 }
 
 /*
@@ -132,60 +131,61 @@ fn main() {
     let config: serde_json::Value =
         serde_json::from_str(&contents).expect("JSON was not well-formatted");
 
-    // let modelManager: ModelManager = ModelManager::new(json);
-    // let mut callback: Box<FnMut(Vec<u8>)> = Box::new(|audio_buf: Vec<u8>| {
-    //     let mut result;
-    //     let mut converted: &mut [i16];
-    //     LittleEndian::read_i16_into(&audio_buf, &mut converted);
-    //     unsafe {
-    //         result = modelManager
-    //             .model
-    //             .speech_to_text(converted, SAMPLE_RATE)
-    //             .unwrap();
-    //         modelManager
-    //             .broker
-    //             .send_message("interpreted", result.as_bytes());
-    //     }
+    let broker_host: &str = &env::var("BROKER_HOST").unwrap();
+    let broker_port: &str = &env::var("BROKER_PORT").unwrap();
 
-    //     println!("{}", result);
-    // });
+    let model_file: &Path = Path::new(config["model"].as_str().unwrap());
+    let alphabet_file: &Path = &Path::new(config["alphabet"].as_str().unwrap());
+    let binary_file: &Path = &Path::new(config["binary"].as_str().unwrap());
+    let trie_file: &Path = &Path::new(config["trie"].as_str().unwrap());
 
-    // The model has been trained on this specific
-    // sample rate.
-    // let SAMPLE_RATE: u32 = 16_000;
-
-    let BROKER_HOST: &str = &env::var("BROKER_HOST").unwrap();
-    let BROKER_PORT: &str = &env::var("BROKER_PORT").unwrap();
-
-    let mut m: Model = Model::load_from_files(
-        &Path::new(config["model"].as_str().unwrap()),
-        N_CEP,
-        N_CONTEXT,
-        &Path::new(config["alphabet"].as_str().unwrap()),
-        BEAM_WIDTH,
-    )
-    .unwrap();
-    m.enable_decoder_with_lm(
-        &Path::new(config["alphabet"].as_str().unwrap()),
-        &Path::new(config["binary"].as_str().unwrap()),
-        &Path::new(config["trie"].as_str().unwrap()),
+    let model_result =
+        Model::load_from_files(model_file, N_CEP, N_CONTEXT, alphabet_file, BEAM_WIDTH);
+    match model_result {
+        Ok(_) => println!("Model loaded"),
+        Err(err) => panic!("{:?}", err),
+    };
+    let mut model: Model = model_result.unwrap();
+    model.enable_decoder_with_lm(
+        alphabet_file,
+        binary_file,
+        trie_file,
         LM_WEIGHT,
         VALID_WORD_COUNT_WEIGHT,
     );
 
-    let mut conn: Connection = Connection::connect(
-        &format!("{}:{}", BROKER_HOST, BROKER_PORT),
+    let conn: Connection = Connection::connect(
+        &format!("{}:{}", broker_host, broker_port),
         ConnectionProperties::default(),
     )
     .wait()
     .expect("connection error");
-    let mut publish_channel: Channel = conn.create_channel().wait().expect("create_channel");
+    let publish_channel: Channel = conn.create_channel().wait().expect("create_channel");
     let mut subcribe_channels: HashMap<&str, Channel> = HashMap::new();
-    // let modelManager: ModelManager = ModelManager {
-    //     broker: &broker,
-    //     model: &m,
-    // };
 
-    let mut queue: Queue<Vec<u8>> = Queue::new();
-    thread::spawn(move || attach_consumer(conn, subcribe_channels, &mut queue));
+    let (sync_sender, receiver) = mpsc::sync_channel(1);
+    const QUEUE_NAME: &str = "audio";
+    const CONSUMER_NAME: &str = "interpret";
+    thread::spawn(move || {
+        attach_consumer(
+            QUEUE_NAME,
+            CONSUMER_NAME,
+            conn,
+            &mut subcribe_channels,
+            &sync_sender,
+        )
+    });
+    loop {
+        if let Ok(audio_buf) = receiver.recv() {
+            // let mut iter = audio_buf.iter();
+            let mut converted: Vec<i16> = vec![0; audio_buf.len() / 2];
+            LittleEndian::read_i16_into(&audio_buf, &mut converted);
+
+            let result: String = model.speech_to_text(&converted, SAMPLE_RATE).unwrap();
+            send_message(&publish_channel, "interpreted", result.as_bytes());
+
+            println!("{}", result);
+        }
+        thread::sleep(HALF_SECOND);
+    }
 }

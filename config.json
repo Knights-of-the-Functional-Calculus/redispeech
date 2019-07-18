@@ -1,6 +1,6 @@
 {
     "model": "models/output_graph.pbmm",
     "alphabet": "models/alphabet.txt",
-    "binaary": "models/lm.binary",
+    "binary": "models/lm.binary",
     "trie": "models/trie"
 }
