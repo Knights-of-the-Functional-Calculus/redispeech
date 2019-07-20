@@ -155,7 +155,7 @@ fn main() {
     );
 
     let conn: Connection = Connection::connect(
-        &format!("{}:{}", broker_host, broker_port),
+        &format!("amqp://{}:{}/%2f", broker_host, broker_port),
         ConnectionProperties::default(),
     )
     .wait()
@@ -177,7 +177,6 @@ fn main() {
     });
     loop {
         if let Ok(audio_buf) = receiver.recv() {
-            // let mut iter = audio_buf.iter();
             let mut converted: Vec<i16> = vec![0; audio_buf.len() / 2];
             LittleEndian::read_i16_into(&audio_buf, &mut converted);
 

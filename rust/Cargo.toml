@@ -1,5 +1,5 @@
 [package]
-name = "rust"
+name = "redispeech"
 version = "0.1.0"
 authors = ["Jack Frost <j4qfrost@gmail.com>"]
 edition = "2018"

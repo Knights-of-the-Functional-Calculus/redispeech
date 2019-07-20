@@ -13,4 +13,4 @@ services:
       BROKER_PORT: 5672
 networks:
  default:
-  name: redis
+  name: broker
