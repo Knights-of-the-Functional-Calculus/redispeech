@@ -154,6 +154,8 @@ fn main() {
         VALID_WORD_COUNT_WEIGHT,
     );
 
+    let broker_host: &str = &env::var("BROKER_HOST").unwrap();
+    let broker_port: &str = &env::var("BROKER_PORT").unwrap();
     let conn: Connection = Connection::connect(
         &format!("amqp://{}:{}/%2f", broker_host, broker_port),
         ConnectionProperties::default(),
@@ -166,15 +168,13 @@ fn main() {
     let (sync_sender, receiver) = mpsc::sync_channel(1);
     const QUEUE_NAME: &str = "audio";
     const CONSUMER_NAME: &str = "interpret";
-    thread::spawn(move || {
-        attach_consumer(
-            QUEUE_NAME,
-            CONSUMER_NAME,
-            conn,
-            &mut subcribe_channels,
-            &sync_sender,
-        )
-    });
+    attach_consumer(
+        QUEUE_NAME,
+        CONSUMER_NAME,
+        conn,
+        &mut subcribe_channels,
+        &sync_sender,
+    );
     loop {
         if let Ok(audio_buf) = receiver.recv() {
             let mut converted: Vec<i16> = vec![0; audio_buf.len() / 2];

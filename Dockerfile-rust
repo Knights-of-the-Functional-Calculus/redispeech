@@ -1,0 +1,21 @@
+FROM rust:latest
+
+RUN apt-get update -y && \
+			apt-get install -y clang
+
+WORKDIR /redispeech
+
+ADD https://github.com/mozilla/DeepSpeech/releases/download/v0.5.1/native_client.amd64.cpu.linux.tar.xz deepspeech-nacl.tar.xz
+RUN tar xvf deepspeech-nacl.tar.xz && cp libdeepspeech.so /usr/lib
+
+# ENV MODEL_PACKAGE https://github.com/mozilla/DeepSpeech/releases/download/v0.5.1/deepspeech-0.5.1-models.tar.gz
+# ADD ${MODEL_PACKAGE} models.tar.gz
+# ENV MODEL_PACKAGE models/deepspeech-0.5.1-models.tar.gz
+# COPY ${MODEL_PACKAGE} models.tar.gz
+# RUN mkdir ../models && tar xvfz models.tar.gz --directory ../models && rm models.tar.gz
+
+COPY rust .
+COPY config.json config.json
+RUN cargo install --path .
+
+CMD ["redispeech", "config.json"]
